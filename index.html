@@ -1,16 +1,16 @@
 <!DOCTYPE html>
 <html lang="fr" class="h-full">
 <head>
-    <link rel="manifest" href="manifest.json">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chantier & Rétro-Planning Ludique</title>
+    <title>Chantier & Rétro-Planning</title>
     
     <!-- Icône Favicon & App Mobile -->
     <link rel="icon" href="https://fav.farm/🏗️" />
     <link rel="apple-touch-icon" href="https://fav.farm/🏗️" />
     <meta name="apple-mobile-web-app-title" content="Travaux" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <link rel="manifest" href="manifest.json">
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -57,16 +57,13 @@
                 </div>
             </div>
             
-            <!-- Navigation par onglets -->
+            <!-- Navigation par onglets (Épurée) -->
             <nav class="flex bg-slate-800 p-1 rounded-xl gap-1 border border-slate-700">
                 <button onclick="switchTab('tasks')" id="btn-tab-tasks" class="px-4 py-2 rounded-lg text-sm font-medium transition-all bg-brand-600 text-white shadow">
                     <i class="fa-solid fa-list-check mr-2"></i>Tâches
                 </button>
                 <button onclick="switchTab('timeline')" id="btn-tab-timeline" class="px-4 py-2 rounded-lg text-sm font-medium transition-all text-slate-300 hover:text-white hover:bg-slate-700">
                     <i class="fa-solid fa-timeline mr-2"></i>Rétro-planning
-                </button>
-                <button onclick="switchTab('settings')" id="btn-tab-settings" class="px-4 py-2 rounded-lg text-sm font-medium transition-all text-slate-300 hover:text-white hover:bg-slate-700">
-                    <i class="fa-solid fa-database mr-2"></i>SQL & Guide GitHub
                 </button>
             </nav>
         </div>
@@ -150,109 +147,6 @@
             <div id="timeline-container" class="relative border-l-2 border-brand-500 ml-4 pl-6 space-y-6 py-2"></div>
         </section>
 
-        <!-- ONGLET 3 : CONFIGURATION SQL & GITHUB -->
-        <section id="tab-settings" class="hidden flex-1 flex flex-col gap-6 overflow-y-auto custom-scrollbar bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-            <div>
-                <h2 class="text-lg font-bold text-slate-800 mb-1">Configuration Supabase & GitHub</h2>
-                <p class="text-xs text-slate-500">Votre application est connectée à votre instance Supabase.</p>
-            </div>
-
-            <!-- Script SQL -->
-            <div class="space-y-2">
-                <div class="flex justify-between items-center">
-                    <label class="text-sm font-semibold text-slate-700">Script SQL DDL complet :</label>
-                    <button onclick="copySql()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium px-3 py-1.5 rounded-lg border border-slate-300 transition-all flex items-center gap-1.5">
-                        <i class="fa-regular fa-copy"></i> Copier le SQL
-                    </button>
-                </div>
-                <textarea id="sql-script-box" readonly rows="8" class="w-full font-mono text-xs p-3 bg-slate-950 text-emerald-400 rounded-xl border border-slate-800 focus:outline-none custom-scrollbar">-- SCRIPT SUPABASE COMPLET
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
-CREATE TABLE IF NOT EXISTS mt_projects (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    name VARCHAR(255) NOT NULL,
-    description TEXT
-);
-
-CREATE TABLE IF NOT EXISTS mt_places (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    name VARCHAR(100) NOT NULL,
-    icon VARCHAR(50) DEFAULT '🏠',
-    color VARCHAR(20) DEFAULT '#3B82F6'
-);
-
-CREATE TABLE IF NOT EXISTS mt_people (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    name VARCHAR(100) NOT NULL,
-    avatar VARCHAR(50) DEFAULT '👤',
-    role VARCHAR(100)
-);
-
-CREATE TABLE IF NOT EXISTS mt_tasks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    title VARCHAR(255) NOT NULL,
-    description TEXT,
-    status VARCHAR(20) DEFAULT 'todo',
-    priority VARCHAR(20) DEFAULT 'moyenne',
-    due_date DATE,
-    project_id UUID REFERENCES mt_projects(id) ON DELETE CASCADE,
-    place_id UUID REFERENCES mt_places(id) ON DELETE SET NULL,
-    assignee_id UUID REFERENCES mt_people(id) ON DELETE SET NULL
-);
-
--- Contraintes UNIQUE
-DO $$ 
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'mt_places_name_key') THEN
-        ALTER TABLE mt_places ADD CONSTRAINT mt_places_name_key UNIQUE (name);
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'mt_people_name_key') THEN
-        ALTER TABLE mt_people ADD CONSTRAINT mt_people_name_key UNIQUE (name);
-    END IF;
-END $$;
-
-INSERT INTO mt_projects (name, description) VALUES ('Rénovation Maison Principale', 'Suivi global des travaux') ON CONFLICT DO NOTHING;
-
-INSERT INTO mt_places (name, icon, color) VALUES
-    ('Extérieur / Jardin', '🌳', '#10B981'),
-    ('Cuisine', '🍳', '#EF4444'),
-    ('Garage', '🛠️', '#F59E0B'),
-    ('Salle de Bains', '🛁', '#3B82F6'),
-    ('Salon', '🛋️', '#8B5CF6'),
-    ('Chambre ARON', '🛏️', '#EC4899'),
-    ('Chambre NOAH', '🛏️', '#8B5CF6'),
-    ('Chambre PARENT', '🛏️', '#3B82F6'),
-    ('Chambre AMI', '🛏️', '#10B981'),
-    ('BUREAU', '💻', '#F59E0B')
-ON CONFLICT (name) DO NOTHING;
-
-INSERT INTO mt_people (name, avatar, role) VALUES
-    ('DEL', '👷', 'Pilote / Chantier'),
-    ('BOB', '🧑‍🔧', 'Artisan / Intervenant'),
-    ('Moi', '🏠', 'Maître d''ouvrage')
-ON CONFLICT (name) DO NOTHING;
-
--- RLS (Sécurité publique API)
-ALTER TABLE mt_projects ENABLE ROW LEVEL SECURITY;
-ALTER TABLE mt_places ENABLE ROW LEVEL SECURITY;
-ALTER TABLE mt_people ENABLE ROW LEVEL SECURITY;
-ALTER TABLE mt_tasks ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Accès total anon mt_projects" ON mt_projects;
-CREATE POLICY "Accès total anon mt_projects" ON mt_projects FOR ALL USING (true) WITH CHECK (true);
-DROP POLICY IF EXISTS "Accès total anon mt_places" ON mt_places;
-CREATE POLICY "Accès total anon mt_places" ON mt_places FOR ALL USING (true) WITH CHECK (true);
-DROP POLICY IF EXISTS "Accès total anon mt_people" ON mt_people;
-CREATE POLICY "Accès total anon mt_people" ON mt_people FOR ALL USING (true) WITH CHECK (true);
-DROP POLICY IF EXISTS "Accès total anon mt_tasks" ON mt_tasks;
-CREATE POLICY "Accès total anon mt_tasks" ON mt_tasks FOR ALL USING (true) WITH CHECK (true);</textarea>
-            </div>
-        </section>
-
     </main>
 
     <!-- MODALE TÂCHE -->
@@ -320,7 +214,6 @@ CREATE POLICY "Accès total anon mt_tasks" ON mt_tasks FOR ALL USING (true) WITH
 
     <!-- JAVASCRIPT & SUPABASE -->
     <script>
-        // URL et Clé ANON Supabase
         const SUPABASE_URL = 'https://owtqtwktvrkblvzzpezz.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im93dHF0d2t0dnJrYmx2enpwZXp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNjAzNzIsImV4cCI6MjEwNzczNjM3Mn0.4dpu3eMVF9cOj_RCEngRG8jaY4aX4T2on1ZmNQOGgUs';
         
@@ -596,19 +489,12 @@ CREATE POLICY "Accès total anon mt_tasks" ON mt_tasks FOR ALL USING (true) WITH
         }
 
         function switchTab(tabName) {
-            ['tasks', 'timeline', 'settings'].forEach(t => {
+            ['tasks', 'timeline'].forEach(t => {
                 document.getElementById(`tab-${t}`).classList.add('hidden');
                 document.getElementById(`btn-tab-${t}`).className = "px-4 py-2 rounded-lg text-sm font-medium transition-all text-slate-300 hover:text-white hover:bg-slate-700";
             });
             document.getElementById(`tab-${tabName}`).classList.remove('hidden');
             document.getElementById(`btn-tab-${tabName}`).className = "px-4 py-2 rounded-lg text-sm font-medium transition-all bg-brand-600 text-white shadow";
-        }
-
-        function copySql() {
-            const box = document.getElementById('sql-script-box');
-            box.select();
-            navigator.clipboard.writeText(box.value);
-            alert("Script SQL copié !");
         }
     </script>
 </body>
