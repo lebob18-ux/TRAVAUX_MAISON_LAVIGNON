@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="fr" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chantier & Rétro-Planning Ludique</title>
+    
+    <!-- Icône Favicon & App Mobile -->
+    <link rel="icon" href="https://fav.farm/🏗️" />
+    <link rel="apple-touch-icon" href="https://fav.farm/🏗️" />
+    <meta name="apple-mobile-web-app-title" content="Travaux" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 50: '#eff6ff', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="h-full bg-slate-100 text-slate-800 font-sans flex flex-col">
+
+    <!-- En-tête -->
+    <header class="bg-slate-900 text-white shadow-md z-20">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="bg-brand-600 p-2.5 rounded-xl shadow-inner text-xl">
+                    <i class="fa-solid fa-hard-hat text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight">Chantier & Rétro-Planning</h1>
+                    <p class="text-xs text-slate-400 flex items-center gap-1.5">
+                        <span id="db-status-dot" class="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+                        <span id="db-status-text">Connecté à Supabase</span>
+                    </p>
+                </div>
+            </div>
+            
+            <!-- Navigation par onglets -->
+            <nav class="flex bg-slate-800 p-1 rounded-xl gap-1 border border-slate-700">
+                <button onclick="switchTab('tasks')" id="btn-tab-tasks" class="px-4 py-2 rounded-lg text-sm font-medium transition-all bg-brand-600 text-white shadow">
+                    <i class="fa-solid fa-list-check mr-2"></i>Tâches
+                </button>
+                <button onclick="switchTab('timeline')" id="btn-tab-timeline" class="px-4 py-2 rounded-lg text-sm font-medium transition-all text-slate-300 hover:text-white hover:bg-slate-700">
+                    <i class="fa-solid fa-timeline mr-2"></i>Rétro-planning
+                </button>
+                <button onclick="switchTab('settings')" id="btn-tab-settings" class="px-4 py-2 rounded-lg text-sm font-medium transition-all text-slate-300 hover:text-white hover:bg-slate-700">
+                    <i class="fa-solid fa-database mr-2"></i>SQL & Guide GitHub
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Corps Principal -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 overflow-hidden flex flex-col">
+
+        <!-- ONGLET 1 : TÂCHES -->
+        <section id="tab-tasks" class="flex-1 flex flex-col gap-4 overflow-hidden">
+            <!-- Barre d'actions & Filtres -->
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+                <div class="flex flex-wrap items-center gap-3 flex-1">
+                    <div class="relative min-w-[220px]">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                            <i class="fa-solid fa-filter"></i>
+                        </span>
+                        <select id="filter-place" onchange="loadTasks()" class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="">Tous les lieux (Pièces)</option>
+                        </select>
+                    </div>
+                    <div class="relative min-w-[180px]">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                            <i class="fa-solid fa-user-tag"></i>
+                        </span>
+                        <select id="filter-assignee" onchange="loadTasks()" class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="">Tous les intervenants</option>
+                        </select>
+                    </div>
+                </div>
+                <button onclick="openTaskModal()" class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-md shadow-brand-500/20 transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-plus"></i> Nouvelle Tâche
+                </button>
+            </div>
+
+            <!-- Colonnes Kanban -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1 overflow-y-auto custom-scrollbar pb-4">
+                <!-- À faire -->
+                <div class="bg-slate-200/60 rounded-2xl p-4 flex flex-col border border-slate-200">
+                    <div class="flex items-center justify-between mb-3 px-1">
+                        <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-amber-500"></span> À faire
+                        </h3>
+                        <span id="count-todo" class="bg-white text-slate-600 text-xs px-2.5 py-0.5 rounded-full font-bold shadow-xs">0</span>
+                    </div>
+                    <div id="col-todo" class="flex-1 flex flex-col gap-3 overflow-y-auto custom-scrollbar pr-1 min-h-[200px]"></div>
+                </div>
+
+                <!-- En cours -->
+                <div class="bg-slate-200/60 rounded-2xl p-4 flex flex-col border border-slate-200">
+                    <div class="flex items-center justify-between mb-3 px-1">
+                        <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-brand-500"></span> En cours
+                        </h3>
+                        <span id="count-in_progress" class="bg-white text-slate-600 text-xs px-2.5 py-0.5 rounded-full font-bold shadow-xs">0</span>
+                    </div>
+                    <div id="col-in_progress" class="flex-1 flex flex-col gap-3 overflow-y-auto custom-scrollbar pr-1 min-h-[200px]"></div>
+                </div>
+
+                <!-- Terminées -->
+                <div class="bg-slate-200/60 rounded-2xl p-4 flex flex-col border border-slate-200">
+                    <div class="flex items-center justify-between mb-3 px-1">
+                        <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-emerald-500"></span> Terminées
+                        </h3>
+                        <span id="count-done" class="bg-white text-slate-600 text-xs px-2.5 py-0.5 rounded-full font-bold shadow-xs">0</span>
+                    </div>
+                    <div id="col-done" class="flex-1 flex flex-col gap-3 overflow-y-auto custom-scrollbar pr-1 min-h-[200px]"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ONGLET 2 : TIMELINE / RÉTRO-PLANNING -->
+        <section id="tab-timeline" class="hidden flex-1 flex flex-col gap-4 overflow-y-auto custom-scrollbar bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <div class="flex justify-between items-center border-b pb-4">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-800">Rétro-Planning des Travaux</h2>
+                    <p class="text-xs text-slate-500">Vue chronologique et échéances des tâches planifiées.</p>
+                </div>
+            </div>
+            <div id="timeline-container" class="relative border-l-2 border-brand-500 ml-4 pl-6 space-y-6 py-2"></div>
+        </section>
+
+        <!-- ONGLET 3 : CONFIGURATION SQL & GITHUB -->
+        <section id="tab-settings" class="hidden flex-1 flex flex-col gap-6 overflow-y-auto custom-scrollbar bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <div>
+                <h2 class="text-lg font-bold text-slate-800 mb-1">Configuration Supabase & GitHub</h2>
+                <p class="text-xs text-slate-500">Votre application est connectée à votre instance Supabase.</p>
+            </div>
+
+            <!-- Script SQL -->
+            <div class="space-y-2">
+                <div class="flex justify-between items-center">
+                    <label class="text-sm font-semibold text-slate-700">Script SQL DDL complet :</label>
+                    <button onclick="copySql()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium px-3 py-1.5 rounded-lg border border-slate-300 transition-all flex items-center gap-1.5">
+                        <i class="fa-regular fa-copy"></i> Copier le SQL
+                    </button>
+                </div>
+                <textarea id="sql-script-box" readonly rows="8" class="w-full font-mono text-xs p-3 bg-slate-950 text-emerald-400 rounded-xl border border-slate-800 focus:outline-none custom-scrollbar">-- SCRIPT SUPABASE COMPLET
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+CREATE TABLE IF NOT EXISTS mt_projects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    name VARCHAR(255) NOT NULL,
+    description TEXT
+);
+
+CREATE TABLE IF NOT EXISTS mt_places (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    name VARCHAR(100) NOT NULL,
+    icon VARCHAR(50) DEFAULT '🏠',
+    color VARCHAR(20) DEFAULT '#3B82F6'
+);
+
+CREATE TABLE IF NOT EXISTS mt_people (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    name VARCHAR(100) NOT NULL,
+    avatar VARCHAR(50) DEFAULT '👤',
+    role VARCHAR(100)
+);
+
+CREATE TABLE IF NOT EXISTS mt_tasks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    status VARCHAR(20) DEFAULT 'todo',
+    priority VARCHAR(20) DEFAULT 'moyenne',
+    due_date DATE,
+    project_id UUID REFERENCES mt_projects(id) ON DELETE CASCADE,
+    place_id UUID REFERENCES mt_places(id) ON DELETE SET NULL,
+    assignee_id UUID REFERENCES mt_people(id) ON DELETE SET NULL
+);
+
+-- Contraintes UNIQUE
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'mt_places_name_key') THEN
+        ALTER TABLE mt_places ADD CONSTRAINT mt_places_name_key UNIQUE (name);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'mt_people_name_key') THEN
+        ALTER TABLE mt_people ADD CONSTRAINT mt_people_name_key UNIQUE (name);
+    END IF;
+END $$;
+
+INSERT INTO mt_projects (name, description) VALUES ('Rénovation Maison Principale', 'Suivi global des travaux') ON CONFLICT DO NOTHING;
+
+INSERT INTO mt_places (name, icon, color) VALUES
+    ('Extérieur / Jardin', '🌳', '#10B981'),
+    ('Cuisine', '🍳', '#EF4444'),
+    ('Garage', '🛠️', '#F59E0B'),
+    ('Salle de Bains', '🛁', '#3B82F6'),
+    ('Salon', '🛋️', '#8B5CF6'),
+    ('Chambre ARON', '🛏️', '#EC4899'),
+    ('Chambre NOAH', '🛏️', '#8B5CF6'),
+    ('Chambre PARENT', '🛏️', '#3B82F6'),
+    ('Chambre AMI', '🛏️', '#10B981'),
+    ('BUREAU', '💻', '#F59E0B')
+ON CONFLICT (name) DO NOTHING;
+
+INSERT INTO mt_people (name, avatar, role) VALUES
+    ('DEL', '👷', 'Pilote / Chantier'),
+    ('BOB', '🧑‍🔧', 'Artisan / Intervenant'),
+    ('Moi', '🏠', 'Maître d''ouvrage')
+ON CONFLICT (name) DO NOTHING;
+
+-- RLS (Sécurité publique API)
+ALTER TABLE mt_projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mt_places ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mt_people ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mt_tasks ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Accès total anon mt_projects" ON mt_projects;
+CREATE POLICY "Accès total anon mt_projects" ON mt_projects FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Accès total anon mt_places" ON mt_places;
+CREATE POLICY "Accès total anon mt_places" ON mt_places FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Accès total anon mt_people" ON mt_people;
+CREATE POLICY "Accès total anon mt_people" ON mt_people FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Accès total anon mt_tasks" ON mt_tasks;
+CREATE POLICY "Accès total anon mt_tasks" ON mt_tasks FOR ALL USING (true) WITH CHECK (true);</textarea>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- MODALE TÂCHE -->
+    <div id="task-modal" class="fixed inset-0 bg-slate-950/60 backdrop-blur-xs hidden items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 space-y-4 border border-slate-100">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 id="modal-title" class="font-bold text-slate-800 text-base">Nouvelle Tâche</h3>
+                <button onclick="closeTaskModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form id="task-form" onsubmit="saveTask(event)" class="space-y-4">
+                <input type="hidden" id="task-id">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Titre de la tâche *</label>
+                    <input type="text" id="task-title" required placeholder="Ex: Peinture mur & finitions" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Lieu / Pièce</label>
+                        <select id="task-place" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Intervenant</label>
+                        <select id="task-assignee" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Statut</label>
+                        <select id="task-status" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="todo">À faire</option>
+                            <option value="in_progress">En cours</option>
+                            <option value="done">Terminée</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Priorité</label>
+                        <select id="task-priority" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="basse">Basse</option>
+                            <option value="moyenne" selected>Moyenne</option>
+                            <option value="haute">Haute</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Date d'échéance</label>
+                        <input type="date" id="task-duedate" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Projet</label>
+                        <select id="task-project" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Description / Notes</label>
+                    <textarea id="task-desc" rows="2" placeholder="Détails..." class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+                </div>
+                <div class="flex justify-end gap-2 pt-2 border-t">
+                    <button type="button" onclick="closeTaskModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold rounded-xl transition-all">Annuler</button>
+                    <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-xl shadow-md transition-all">Enregistrer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT & SUPABASE -->
+    <script>
+        // URL et Clé ANON Supabase
+        const SUPABASE_URL = 'https://owtqtwktvrkblvzzpezz.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im93dHF0d2t0dnJrYmx2enpwZXp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNjAzNzIsImV4cCI6MjEwNzczNjM3Mn0.4dpu3eMVF9cOj_RCEngRG8jaY4aX4T2on1ZmNQOGgUs';
+        
+        let supabaseClient = null;
+        try {
+            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        } catch(e) {
+            console.error("Erreur d'initialisation Supabase", e);
+        }
+
+        let tasksData = [];
+        let placesData = [];
+        let peopleData = [];
+        let projectsData = [];
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            await fetchAllData();
+        });
+
+        async function fetchAllData() {
+            if (!supabaseClient) return;
+            try {
+                const [pRes, plRes, peRes, tRes] = await Promise.all([
+                    supabaseClient.from('mt_projects').select('*'),
+                    supabaseClient.from('mt_places').select('*'),
+                    supabaseClient.from('mt_people').select('*'),
+                    supabaseClient.from('mt_tasks').select('*, mt_places(*), mt_people(*), mt_projects(*)')
+                ]);
+
+                if(pRes.error) throw pRes.error;
+                if(plRes.error) throw plRes.error;
+                if(peRes.error) throw peRes.error;
+                if(tRes.error) throw tRes.error;
+
+                projectsData = pRes.data || [];
+                placesData = plRes.data || [];
+                peopleData = peRes.data || [];
+                tasksData = tRes.data || [];
+
+                document.getElementById('db-status-dot').className = "w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse";
+                document.getElementById('db-status-text').innerText = "Connecté à Supabase";
+
+                populateDropdowns();
+                loadTasks();
+                renderTimeline();
+            } catch (err) {
+                console.error("Erreur Supabase:", err);
+                document.getElementById('db-status-dot').className = "w-2 h-2 rounded-full bg-rose-500 inline-block";
+                document.getElementById('db-status-text').innerText = "Erreur de connexion";
+            }
+        }
+
+        function populateDropdowns() {
+            const fPlace = document.getElementById('filter-place');
+            const mPlace = document.getElementById('task-place');
+            fPlace.innerHTML = '<option value="">Tous les lieux (Pièces)</option>';
+            mPlace.innerHTML = '';
+            placesData.forEach(p => {
+                fPlace.innerHTML += `<option value="${p.id}">${p.icon || '🏠'} ${p.name}</option>`;
+                mPlace.innerHTML += `<option value="${p.id}">${p.icon || '🏠'} ${p.name}</option>`;
+            });
+
+            const fAssignee = document.getElementById('filter-assignee');
+            const mAssignee = document.getElementById('task-assignee');
+            fAssignee.innerHTML = '<option value="">Tous les intervenants</option>';
+            mAssignee.innerHTML = '<option value="">Non assigné</option>';
+            peopleData.forEach(pe => {
+                fAssignee.innerHTML += `<option value="${pe.id}">${pe.avatar || '👤'} ${pe.name}</option>`;
+                mAssignee.innerHTML += `<option value="${pe.id}">${pe.avatar || '👤'} ${pe.name}</option>`;
+            });
+
+            const mProject = document.getElementById('task-project');
+            mProject.innerHTML = '';
+            projectsData.forEach(pr => {
+                mProject.innerHTML += `<option value="${pr.id}">${pr.name}</option>`;
+            });
+        }
+
+        function loadTasks() {
+            const filterPlace = document.getElementById('filter-place').value;
+            const filterAssignee = document.getElementById('filter-assignee').value;
+
+            const colTodo = document.getElementById('col-todo');
+            const colInProgress = document.getElementById('col-in_progress');
+            const colDone = document.getElementById('col-done');
+
+            colTodo.innerHTML = '';
+            colInProgress.innerHTML = '';
+            colDone.innerHTML = '';
+
+            let counts = { todo: 0, in_progress: 0, done: 0 };
+
+            const filtered = tasksData.filter(t => {
+                if (filterPlace && t.place_id !== filterPlace) return false;
+                if (filterAssignee && t.assignee_id !== filterAssignee) return false;
+                return true;
+            });
+
+            filtered.forEach(task => {
+                counts[task.status] = (counts[task.status] || 0) + 1;
+                const place = task.mt_places || {};
+                const person = task.mt_people || {};
+                
+                let priorityBadge = '';
+                if(task.priority === 'haute') priorityBadge = '<span class="bg-rose-100 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-full">Urgent</span>';
+                if(task.priority === 'moyenne') priorityBadge = '<span class="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-full">Moyenne</span>';
+
+                let dueDateHTML = task.due_date ? `<span class="text-[11px] text-slate-500 flex items-center gap-1"><i class="fa-regular fa-calendar"></i> ${task.due_date}</span>` : '';
+
+                const cardHTML = `
+                    <div class="bg-white p-3.5 rounded-2xl shadow-xs border border-slate-200 hover:shadow-md transition-all flex flex-col gap-2 relative group">
+                        <div class="flex items-start justify-between gap-2">
+                            <span class="text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-700 rounded-lg flex items-center gap-1">
+                                ${place.icon || '🏠'} ${place.name || 'Général'}
+                            </span>
+                            <div class="flex items-center gap-1">
+                                ${priorityBadge}
+                                <button onclick="openTaskModal('${task.id}')" class="text-slate-400 hover:text-brand-600 p-1"><i class="fa-solid fa-pen text-xs"></i></button>
+                                <button onclick="deleteTask('${task.id}')" class="text-slate-400 hover:text-rose-600 p-1"><i class="fa-solid fa-trash text-xs"></i></button>
+                            </div>
+                        </div>
+                        <h4 class="font-bold text-slate-800 text-sm leading-tight">${task.title}</h4>
+                        ${task.description ? `<p class="text-xs text-slate-500 line-clamp-2">${task.description}</p>` : ''}
+                        <div class="flex items-center justify-between pt-2 border-t border-slate-100 mt-1">
+                            <span class="text-xs font-medium text-slate-600 flex items-center gap-1">
+                                ${person.avatar || '👤'} ${person.name || 'Libre'}
+                            </span>
+                            ${dueDateHTML}
+                        </div>
+                        <div class="flex gap-1 pt-1">
+                            ${task.status !== 'todo' ? `<button onclick="updateStatus('${task.id}', 'todo')" title="À faire" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] py-1 rounded font-medium">À faire</button>` : ''}
+                            ${task.status !== 'in_progress' ? `<button onclick="updateStatus('${task.id}', 'in_progress')" title="En cours" class="flex-1 bg-blue-50 hover:bg-blue-100 text-brand-600 text-[10px] py-1 rounded font-medium">En cours</button>` : ''}
+                            ${task.status !== 'done' ? `<button onclick="updateStatus('${task.id}', 'done')" title="Fait" class="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 text-[10px] py-1 rounded font-medium"><i class="fa-solid fa-check"></i> Fait</button>` : ''}
+                        </div>
+                    </div>
+                `;
+
+                if (task.status === 'todo') colTodo.innerHTML += cardHTML;
+                else if (task.status === 'in_progress') colInProgress.innerHTML += cardHTML;
+                else if (task.status === 'done') colDone.innerHTML += cardHTML;
+            });
+
+            document.getElementById('count-todo').innerText = counts.todo;
+            document.getElementById('count-in_progress').innerText = counts.in_progress;
+            document.getElementById('count-done').innerText = counts.done;
+        }
+
+        function renderTimeline() {
+            const container = document.getElementById('timeline-container');
+            container.innerHTML = '';
+
+            const sorted = [...tasksData].sort((a,b) => {
+                if(!a.due_date) return 1;
+                if(!b.due_date) return -1;
+                return new Date(a.due_date) - new Date(b.due_date);
+            });
+
+            if(sorted.length === 0) {
+                container.innerHTML = `<p class="text-xs text-slate-400 italic">Aucune tâche planifiée.</p>`;
+                return;
+            }
+
+            sorted.forEach(t => {
+                const place = t.mt_places || {};
+                const person = t.mt_people || {};
+                let statusColor = 'bg-amber-500';
+                if(t.status === 'in_progress') statusColor = 'bg-brand-500';
+                if(t.status === 'done') statusColor = 'bg-emerald-500';
+
+                container.innerHTML += `
+                    <div class="relative pl-2">
+                        <span class="absolute -left-[31px] top-1.5 w-4 h-4 rounded-full ${statusColor} border-2 border-white shadow-xs"></span>
+                        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">${t.due_date ? t.due_date : 'Pas de date'}</span>
+                                <h4 class="font-bold text-slate-800 text-sm">${t.title}</h4>
+                                <p class="text-xs text-slate-500">${place.icon || '🏠'} ${place.name || 'Général'} • ${person.avatar || '👤'} ${person.name || 'Non assigné'}</p>
+                            </div>
+                            <span class="self-start sm:self-center px-2.5 py-1 rounded-full text-xs font-semibold ${t.status === 'done' ? 'bg-emerald-100 text-emerald-700' : (t.status === 'in_progress' ? 'bg-brand-100 text-brand-700' : 'bg-amber-100 text-amber-700')}">
+                                ${t.status === 'done' ? 'Terminée' : (t.status === 'in_progress' ? 'En cours' : 'À faire')}
+                            </span>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        async function updateStatus(id, newStatus) {
+            const { error } = await supabaseClient.from('mt_tasks').update({ status: newStatus }).eq('id', id);
+            if(error) {
+                alert("Erreur de mise à jour : " + error.message);
+                return;
+            }
+            if(newStatus === 'done') {
+                confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
+            }
+            await fetchAllData();
+        }
+
+        function openTaskModal(taskId = null) {
+            document.getElementById('task-modal').classList.remove('hidden');
+            document.getElementById('task-modal').classList.add('flex');
+            document.getElementById('task-form').reset();
+            document.getElementById('task-id').value = '';
+
+            if (taskId) {
+                document.getElementById('modal-title').innerText = "Modifier la Tâche";
+                const task = tasksData.find(t => t.id === taskId);
+                if (task) {
+                    document.getElementById('task-id').value = task.id;
+                    document.getElementById('task-title').value = task.title;
+                    document.getElementById('task-place').value = task.place_id || '';
+                    document.getElementById('task-assignee').value = task.assignee_id || '';
+                    document.getElementById('task-status').value = task.status;
+                    document.getElementById('task-priority').value = task.priority;
+                    document.getElementById('task-duedate').value = task.due_date || '';
+                    document.getElementById('task-project').value = task.project_id || (projectsData[0] ? projectsData[0].id : '');
+                    document.getElementById('task-desc').value = task.description || '';
+                }
+            } else {
+                document.getElementById('modal-title').innerText = "Nouvelle Tâche";
+                if(projectsData[0]) document.getElementById('task-project').value = projectsData[0].id;
+            }
+        }
+
+        function closeTaskModal() {
+            document.getElementById('task-modal').classList.remove('flex');
+            document.getElementById('task-modal').classList.add('hidden');
+        }
+
+        async function saveTask(e) {
+            e.preventDefault();
+            const id = document.getElementById('task-id').value;
+            const payload = {
+                title: document.getElementById('task-title').value,
+                place_id: document.getElementById('task-place').value || null,
+                assignee_id: document.getElementById('task-assignee').value || null,
+                status: document.getElementById('task-status').value,
+                priority: document.getElementById('task-priority').value,
+                due_date: document.getElementById('task-duedate').value || null,
+                project_id: document.getElementById('task-project').value || null,
+                description: document.getElementById('task-desc').value || null
+            };
+
+            let res;
+            if(id) {
+                res = await supabaseClient.from('mt_tasks').update(payload).eq('id', id);
+            } else {
+                res = await supabaseClient.from('mt_tasks').insert([payload]);
+            }
+
+            if(res.error) {
+                alert("Erreur lors de l'enregistrement : " + res.error.message);
+                return;
+            }
+
+            if(payload.status === 'done' && !id) {
+                confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+            }
+
+            closeTaskModal();
+            await fetchAllData();
+        }
+
+        async function deleteTask(id) {
+            if(!confirm("Supprimer cette tâche ?")) return;
+            const { error } = await supabaseClient.from('mt_tasks').delete().eq('id', id);
+            if(error) {
+                alert("Erreur : " + error.message);
+                return;
+            }
+            await fetchAllData();
+        }
+
+        function switchTab(tabName) {
+            ['tasks', 'timeline', 'settings'].forEach(t => {
+                document.getElementById(`tab-${t}`).classList.add('hidden');
+                document.getElementById(`btn-tab-${t}`).className = "px-4 py-2 rounded-lg text-sm font-medium transition-all text-slate-300 hover:text-white hover:bg-slate-700";
+            });
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+            document.getElementById(`btn-tab-${tabName}`).className = "px-4 py-2 rounded-lg text-sm font-medium transition-all bg-brand-600 text-white shadow";
+        }
+
+        function copySql() {
+            const box = document.getElementById('sql-script-box');
+            box.select();
+            navigator.clipboard.writeText(box.value);
+            alert("Script SQL copié !");
+        }
+    </script>
+</body>
+</html>
