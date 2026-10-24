@@ -37,6 +37,11 @@
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        @keyframes pulse-subtle {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.03); }
+        }
+        .animate-pulse-subtle { animation: pulse-subtle 2s infinite; }
     </style>
 </head>
 <body class="h-full bg-slate-100 text-slate-800 font-sans flex flex-col">
@@ -45,19 +50,22 @@
     <header class="bg-slate-900 text-white shadow-md z-20">
         <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
             <div class="flex items-center space-x-3">
-                <div class="bg-brand-600 p-2.5 rounded-xl shadow-inner text-xl">
+                <div class="bg-brand-600 p-2.5 rounded-xl shadow-inner text-xl relative">
                     <i class="fa-solid fa-hard-hat text-white"></i>
+                    <!-- Badge de notification en direct -->
+                    <span id="header-badge" class="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold hidden">0</span>
                 </div>
                 <div>
                     <h1 class="text-xl font-bold tracking-tight">Chantier & Rétro-Planning</h1>
                     <p class="text-xs text-slate-400 flex items-center gap-1.5">
                         <span id="db-status-dot" class="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
                         <span id="db-status-text">Connecté à Supabase</span>
+                        <span id="notification-alert-text" class="text-amber-400 font-medium ml-2 hidden"></span>
                     </p>
                 </div>
             </div>
             
-            <!-- Navigation par onglets (Épurée) -->
+            <!-- Navigation par onglets -->
             <nav class="flex bg-slate-800 p-1 rounded-xl gap-1 border border-slate-700">
                 <button onclick="switchTab('tasks')" id="btn-tab-tasks" class="px-4 py-2 rounded-lg text-sm font-medium transition-all bg-brand-600 text-white shadow">
                     <i class="fa-solid fa-list-check mr-2"></i>Tâches
@@ -228,12 +236,18 @@
         let placesData = [];
         let peopleData = [];
         let projectsData = [];
+        let previousTaskCount = null;
 
         document.addEventListener('DOMContentLoaded', async () => {
             await fetchAllData();
+
+            // Actualisation automatique toutes les 30 secondes pour voir les modifs des autres (DEL, BOB...)
+            setInterval(async () => {
+                await fetchAllData(true);
+            }, 30000);
         });
 
-        async function fetchAllData() {
+        async function fetchAllData(isBackground = false) {
             if (!supabaseClient) return;
             try {
                 const [pRes, plRes, peRes, tRes] = await Promise.all([
@@ -251,18 +265,72 @@
                 projectsData = pRes.data || [];
                 placesData = plRes.data || [];
                 peopleData = peRes.data || [];
-                tasksData = tRes.data || [];
+                
+                const newTasks = tRes.data || [];
+
+                // Notification si de nouvelles tâches ont été ajoutées par quelqu'un d'autre
+                if (previousTaskCount !== null && newTasks.length > previousTaskCount) {
+                    const diff = newTasks.length - previousTaskCount;
+                    showNotificationAlert(`+${diff} nouvelle(s) tâche(s) ajoutée(s) !`);
+                }
+                previousTaskCount = newTasks.length;
+                tasksData = newTasks;
 
                 document.getElementById('db-status-dot').className = "w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse";
                 document.getElementById('db-status-text').innerText = "Connecté à Supabase";
 
-                populateDropdowns();
+                if (!isBackground) {
+                    populateDropdowns();
+                }
                 loadTasks();
                 renderTimeline();
+                updateHeaderBadge();
             } catch (err) {
                 console.error("Erreur Supabase:", err);
                 document.getElementById('db-status-dot').className = "w-2 h-2 rounded-full bg-rose-500 inline-block";
                 document.getElementById('db-status-text').innerText = "Erreur de connexion";
+            }
+        }
+
+        function showNotificationAlert(text) {
+            const alertSpan = document.getElementById('notification-alert-text');
+            alertSpan.innerText = text;
+            alertSpan.classList.remove('hidden');
+            
+            // Petit son de bip discret via l'API Web Audio
+            playNotificationSound();
+
+            setTimeout(() => {
+                alertSpan.classList.add('hidden');
+            }, 6000);
+        }
+
+        function playNotificationSound() {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // Note D5
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.3);
+            } catch(e) {
+                // Silencieux si non supporté par le navigateur
+            }
+        }
+
+        function updateHeaderBadge() {
+            const todoCount = tasksData.filter(t => t.status === 'todo').length;
+            const badge = document.getElementById('header-badge');
+            if (todoCount > 0) {
+                badge.innerText = todoCount;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
             }
         }
 
@@ -305,6 +373,7 @@
             colDone.innerHTML = '';
 
             let counts = { todo: 0, in_progress: 0, done: 0 };
+            const todayStr = new Date().toISOString().split('T')[0];
 
             const filtered = tasksData.filter(t => {
                 if (filterPlace && t.place_id !== filterPlace) return false;
@@ -321,7 +390,13 @@
                 if(task.priority === 'haute') priorityBadge = '<span class="bg-rose-100 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-full">Urgent</span>';
                 if(task.priority === 'moyenne') priorityBadge = '<span class="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-full">Moyenne</span>';
 
-                let dueDateHTML = task.due_date ? `<span class="text-[11px] text-slate-500 flex items-center gap-1"><i class="fa-regular fa-calendar"></i> ${task.due_date}</span>` : '';
+                let dueDateHTML = '';
+                if (task.due_date) {
+                    let isLate = task.due_date < todayStr && task.status !== 'done';
+                    let dateClass = isLate ? 'text-rose-600 font-bold bg-rose-50 px-1.5 py-0.5 rounded' : 'text-slate-500';
+                    let lateIcon = isLate ? '<i class="fa-solid fa-triangle-exclamation"></i> ' : '<i class="fa-regular fa-calendar"></i> ';
+                    dueDateHTML = `<span class="text-[11px] ${dateClass} flex items-center gap-1">${lateIcon}${task.due_date}</span>`;
+                }
 
                 const cardHTML = `
                     <div class="bg-white p-3.5 rounded-2xl shadow-xs border border-slate-200 hover:shadow-md transition-all flex flex-col gap-2 relative group">
